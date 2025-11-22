@@ -1,17 +1,35 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <title>ブログ管理画面 - ブロックサプライズ</title>
-  <script type="module">
-    // Firebase SDKの読み込み
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
-    import { getFirestore, collection, addDoc, getDocs } 
-      from "https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js";
-    import { getAuth, GoogleAuthProvider, signInWithPopup } 
-      from "https://www.gstatic.com/firebasejs/12.6.0/firebase-auth.js";
+  <meta charset="UTF-8" />
+  <title>ブログ管理画面 (Bサイト)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: "Noto Serif JP", serif; line-height: 1.8; margin: 48px auto; max-width: 720px; color: #222; }
+    h1 { font-size: 1.6rem; margin-bottom: 8px; }
+    .card { padding: 16px 20px; border: 1px solid #e5e7eb; border-radius: 12px; margin: 18px 0; background: #fafafa; }
+    label { display: block; font-weight: 600; margin: 12px 0 6px; }
+    input, textarea { width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 8px; background: #fff; }
+    button { padding: 10px 14px; border-radius: 8px; border: 1px solid #222; background: #fff; cursor: pointer; }
+    button.primary { background: #111; color: #fff; border-color: #111; }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    ul { list-style: none; padding: 0; margin: 0; }
+    li { padding: 10px 0; border-bottom: 1px solid #eee; }
+    .muted { color: #666; font-size: 0.9rem; }
+    .space { height: 8px; }
+  </style>
 
-    // Firebase設定
+  <script type="module">
+    // Firebase SDK
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
+    import { 
+      getFirestore, collection, addDoc, getDocs, serverTimestamp 
+    } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js";
+    import { 
+      getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged 
+    } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-auth.js";
+
+    // Firebase 設定（祐斗さんのプロジェクト）
     const firebaseConfig = {
       apiKey: "AIzaSyCAnf0DWF2AJFKljrhzFfeTBRWYzRPiEhU",
       authDomain: "posts-308c6.firebaseapp.com",
@@ -26,59 +44,140 @@
     const db = getFirestore(app);
     const auth = getAuth(app);
 
-    document.addEventListener("DOMContentLoaded", () => {
-      // Googleログイン
-      document.getElementById("loginBtn").onclick = async () => {
-        const provider = new GoogleAuthProvider();
-        await signInWithPopup(auth, provider);
-        alert("ログインしました");
-      };
+    // UI要素
+    const $ = (id) => document.getElementById(id);
 
-      // 保存処理（バリデーション付き）
-      document.getElementById("saveBtn").onclick = async () => {
-        const title = document.getElementById("title").value.trim();
-        const content = document.getElementById("content").value.trim();
+    // 認証状態監視：ログイン/ログアウトでUIを切り替え
+    onAuthStateChanged(auth, (user) => {
+      const loggedIn = !!user;
+      $("authCard").style.display = loggedIn ? "none" : "block";
+      $("editorCard").style.display = loggedIn ? "block" : "none";
+      $("status").textContent = loggedIn ? `ログイン中：${user.email}` : "未ログイン";
+    });
 
-        if (!title || !content) {
-          alert("タイトルと本文を入力してください");
-          return;
-        }
+    // ログイン処理（Email/Password）
+    $("loginBtn").addEventListener("click", async () => {
+      const email = $("email").value.trim();
+      const password = $("password").value.trim();
+      if (!email || !password) {
+        alert("メールアドレスとパスワードを入力してください。");
+        return;
+      }
+      try {
+        await signInWithEmailAndPassword(auth, email, password);
+        alert("ログインしました。");
+      } catch (err) {
+        alert("ログイン失敗: " + err.message);
+      }
+    });
 
+    // ログアウト
+    $("logoutBtn").addEventListener("click", async () => {
+      await signOut(auth);
+      alert("ログアウトしました。");
+    });
+
+    // 記事保存（バリデーション＋サーバータイムスタンプ）
+    $("saveBtn").addEventListener("click", async () => {
+      const title = $("title").value.trim();
+      const content = $("content").value.trim();
+
+      if (!title || !content) {
+        alert("タイトルと本文を入力してください。");
+        return;
+      }
+      if (!auth.currentUser) {
+        alert("保存にはログインが必要です。");
+        return;
+      }
+
+      try {
         await addDoc(collection(db, "posts"), {
-          title: title,
-          content: content,
-          createdAt: new Date()
+          title,
+          content,
+          createdAt: serverTimestamp(),   // サーバー時刻で安定
+          authorUid: auth.currentUser.uid,
+          authorEmail: auth.currentUser.email
         });
-        alert("記事を保存しました");
+        $("title").value = "";
+        $("content").value = "";
+        alert("記事を保存しました。");
         loadPosts();
-      };
+      } catch (err) {
+        alert("保存に失敗しました: " + err.message);
+      }
+    });
 
-      // 記事一覧読み込み
-      async function loadPosts() {
-        const querySnapshot = await getDocs(collection(db, "posts"));
-        const list = document.getElementById("postList");
+    // 記事一覧読み込み
+    async function loadPosts() {
+      try {
+        const snap = await getDocs(collection(db, "posts"));
+        const list = $("postList");
         list.innerHTML = "";
-        querySnapshot.forEach((docSnap) => {
-          const data = docSnap.data();
+        snap.forEach((doc) => {
+          const data = doc.data();
+          const when = data.createdAt?.toDate?.() ? data.createdAt.toDate().toLocaleString() : "日時未設定";
           const li = document.createElement("li");
-          li.textContent = `${data.title} - ${data.createdAt.toDate().toLocaleString()}`;
+          li.innerHTML = `<strong>${data.title}</strong><div class="muted">${when}</div>`;
           list.appendChild(li);
         });
+      } catch (err) {
+        alert("一覧取得に失敗しました: " + err.message);
       }
+    }
+
+    // 初期読み込み
+    window.addEventListener("DOMContentLoaded", () => {
       loadPosts();
     });
   </script>
 </head>
 <body>
-  <h1>ブログ管理画面</h1>
-  <button id="loginBtn">Googleログイン</button>
+  <h1>ブログ管理画面 (Bサイト)</h1>
+  <div class="muted" id="status">未ログイン</div>
 
-  <h2>新規記事作成</h2>
-  <input id="title" type="text" placeholder="タイトル"><br>
-  <textarea id="content" rows="5" placeholder="本文"></textarea><br>
-  <button id="saveBtn">保存</button>
+  <div class="card" id="authCard">
+    <h2>ログイン（メールアドレス）</h2>
+    <label for="email">メールアドレス</label>
+    <input id="email" type="email" placeholder="you@example.com" />
+    <label for="password">パスワード</label>
+    <input id="password" type="password" placeholder="••••••••" />
+    <div class="space"></div>
+    <div class="row">
+      <button class="primary" id="loginBtn">ログイン</button>
+    </div>
+    <p class="muted">Firebase Console → Authentication → サインイン方法で「Email/Password」を有効化し、ユーザーを追加してください。</p>
+  </div>
 
-  <h2>記事一覧</h2>
-  <ul id="postList"></ul>
+  <div class="card" id="editorCard" style="display:none;">
+    <h2>新規記事作成</h2>
+    <label for="title">タイトル</label>
+    <input id="title" type="text" placeholder="タイトル" />
+    <label for="content">本文</label>
+    <textarea id="content" rows="6" placeholder="本文"></textarea>
+    <div class="space"></div>
+    <div class="row">
+      <button class="primary" id="saveBtn">保存</button>
+      <button id="logoutBtn">ログアウト</button>
+    </div>
+    <p class="muted">保存にはログインが必要です。保存後は下の一覧に反映されます。</p>
+  </div>
+
+  <div class="card">
+    <h2>記事一覧</h2>
+    <ul id="postList"></ul>
+  </div>
+
+  <div class="muted">
+    セキュリティ補足：Firestoreのルールで「ログイン済みのみ書き込み可」を設定してください。例：
+    <pre><code>service cloud.firestore {
+  match /databases/{database}/documents {
+    match /posts/{postId} {
+      allow read: if true;              // 公開読み取り
+      allow write: if request.auth != null; // 認証済みのみ書き込み
+    }
+  }
+}</code></pre>
+  </div>
 </body>
 </html>
