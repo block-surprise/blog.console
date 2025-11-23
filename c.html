@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>NGワード管理</title>
+  <style>
+    body { font-family: sans-serif; padding:20px; }
+    input { padding:8px; margin-right:8px; }
+    button { padding:8px 12px; }
+    ul { margin-top:20px; }
+    li { margin:6px 0; }
+  </style>
+</head>
+<body>
+  <h1>NGワード管理ページ</h1>
+  <form id="addForm">
+    <input id="newWord" type="text" placeholder="NGワードを入力" required />
+    <button type="submit">追加</button>
+  </form>
+
+  <h2>現在のNGワード一覧</h2>
+  <ul id="wordList"></ul>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
+    import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyDe-uSTjbvc_I51iB5d5MH8byG8ATQmRa0",
+      authDomain: "block-surprise-community.firebaseapp.com",
+      projectId: "block-surprise-community",
+      storageBucket: "block-surprise-community.firebasestorage.app",
+      messagingSenderId: "734221997168",
+      appId: "1:734221997168:web:3ea9659c4b140704d610b5",
+      measurementId: "G-V5G9WVG3Z0"
+    };
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    const addForm = document.getElementById("addForm");
+    const newWordInput = document.getElementById("newWord");
+    const wordList = document.getElementById("wordList");
+
+    // NGワード一覧を読み込み
+    async function loadWords() {
+      wordList.innerHTML = "";
+      const snap = await getDocs(collection(db, "ngWords"));
+      snap.forEach(docu => {
+        const d = docu.data();
+        const li = document.createElement("li");
+        li.textContent = d.word;
+        const delBtn = document.createElement("button");
+        delBtn.textContent = "削除";
+        delBtn.onclick = async () => {
+          await deleteDoc(doc(db, "ngWords", docu.id));
+          loadWords();
+        };
+        li.appendChild(delBtn);
+        wordList.appendChild(li);
+      });
+    }
+
+    // NGワード追加
+    addForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const word = newWordInput.value.trim();
+      if (!word) return;
+      await addDoc(collection(db, "ngWords"), {
+        word,
+        createdAt: serverTimestamp()
+      });
+      newWordInput.value = "";
+      loadWords();
+    });
+
+    loadWords();
+  </script>
+</body>
+</html>
