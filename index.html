@@ -146,7 +146,6 @@
     <div class="row">
       <button class="primary" id="loginBtn">ログイン</button>
     </div>
-    <p class="muted">Firebase Console → Authentication → サインイン方法で「Email/Password」を有効化し、ユーザーを追加してください。</p>
   </div>
 
   <div class="card" id="editorCard" style="display:none;">
@@ -166,18 +165,6 @@
   <div class="card">
     <h2>記事一覧</h2>
     <ul id="postList"></ul>
-  </div>
-
-  <div class="muted">
-    セキュリティ補足：Firestoreのルールで「ログイン済みのみ書き込み可」を設定してください。例：
-    <pre><code>service cloud.firestore {
-  match /databases/{database}/documents {
-    match /posts/{postId} {
-      allow read: if true;              // 公開読み取り
-      allow write: if request.auth != null; // 認証済みのみ書き込み
-    }
-  }
-}</code></pre>
   </div>
 </body>
 </html>
